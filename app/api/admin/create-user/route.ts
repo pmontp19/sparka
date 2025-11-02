@@ -51,9 +51,9 @@ export async function POST(request: NextRequest) {
       headers: new Headers({ "x-admin-secret": env.ADMIN_SECRET }),
     });
 
-    if (result.error) {
+    if (!result.user) {
       return NextResponse.json(
-        { error: result.error.message || "Failed to create user" },
+        { error: "Failed to create user" },
         { status: 400 }
       );
     }
@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       user: {
-        id: result.data?.user?.id,
-        email: result.data?.user?.email,
-        name: result.data?.user?.name,
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
       },
     });
   } catch (error) {

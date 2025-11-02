@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { createAuthMiddleware, APIError } from "better-auth/api";
 import { env } from "@/lib/env";
 import { db } from "./db/client";
 import { schema } from "./db/schema";
@@ -27,18 +28,16 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
   plugins: [nextCookies()],
-  advanced: {
-    hooks: {
-      // Disable public signup - only allow via admin script
-      signUp: {
-        before: async (ctx) => {
-          // Check if request has admin secret token
-          const adminSecret = ctx.headers?.get("x-admin-secret");
-          if (adminSecret !== env.ADMIN_SECRET) {
-            throw new Error("Public signup is disabled. Contact administrator.");
-          }
-        },
-      },
-    },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-up/email") {
+        const adminSecret = ctx.headers?.get("x-admin-secret");
+        if (adminSecret !== env.ADMIN_SECRET) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Public signup is disabled. Contact administrator.",
+          });
+        }
+      }
+    }),
   },
 });
