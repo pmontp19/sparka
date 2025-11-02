@@ -14,6 +14,7 @@ import {
 import type { UIChat } from "@/lib/types/uiChat";
 import { generateUUID, getTextContentFromMessage } from "@/lib/utils";
 import { useChatId } from "@/providers/chat-id-provider";
+import { useSession } from "@/providers/session-provider";
 import { useTRPC } from "@/trpc/react";
 
 export function useSaveChat() {
@@ -30,40 +31,19 @@ export function useSaveChat() {
 
   const saveChatMutation = useMutation({
     mutationFn: async ({
-      chatId,
       message,
     }: {
-      chatId: string;
       message: string;
     }) => {
-      // Save chat with temporary title first
-      const tempChat = {
-        id: chatId,
-        title: "Untitled",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        visibility: "private" as const,
-      };
-
-      await saveAnonymousChatToStorage({ ...tempChat, isPinned: false });
-      return { tempChat, message };
-    },
-    onSuccess: async ({ tempChat, message }) => {
-      // Generate proper title asynchronously after successful save
+      // Generate title for the chat
       const data = await generateTitleMutation.mutateAsync({ message });
-      if (data?.title) {
-        // Update the chat with the generated title
-        await saveAnonymousChatToStorage({
-          ...tempChat,
-          title: data.title,
-          isPinned: false,
-        });
 
-        // Invalidate chats to refresh the UI
-        queryClient.invalidateQueries({
-          queryKey: trpc.chat.getAllChats.queryKey(),
-        });
-      }
+      // Invalidate chats to refresh the UI
+      queryClient.invalidateQueries({
+        queryKey: trpc.chat.getAllChats.queryKey(),
+      });
+
+      return data;
     },
     onError: (error) => {
       console.error("Failed to save chat:", error);
@@ -72,13 +52,8 @@ export function useSaveChat() {
   });
 
   const saveChat = useCallback(
-    (chatId: string, message: string, isAuthenticated: boolean) => {
-      // Skip if authenticated (API handles it)
-      if (isAuthenticated) {
-        return;
-      }
-
-      return saveChatMutation.mutate({ chatId, message });
+    (message: string) => {
+      return saveChatMutation.mutate({ message });
     },
     [saveChatMutation]
   );
@@ -339,8 +314,6 @@ export function useDeleteTrailingMessages() {
 }
 
 export function useCloneChat() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -349,46 +322,13 @@ export function useCloneChat() {
     [trpc.chat.getAllChats]
   );
 
-  const copyPublicChatMutationOptions = useMemo(
+  const cloneChatMutationOptions = useMemo(
     () => trpc.chat.cloneSharedChat.mutationOptions(),
     [trpc.chat.cloneSharedChat]
   );
 
-  return useDualMutation({
-    ...copyPublicChatMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({ chatId }: { chatId: string }) => {
-      const originalChat = queryClient.getQueryData(
-        trpc.chat.getPublicChat.queryKey({ chatId })
-      );
-      const originalMessages = queryClient.getQueryData(
-        trpc.chat.getPublicChatMessages.queryKey({ chatId })
-      ) as ChatMessage[] | undefined;
-      if (!(originalChat && originalMessages)) {
-        throw new Error("Original chat data not found in cache");
-      }
-      const originalMessagesIds = originalMessages.map((m) => m.id);
-      const allDocumentQueries = queryClient.getQueriesData({
-        queryKey: trpc.document.getPublicDocuments
-          .queryKey({ id: "" })
-          .slice(0, -1),
-      });
-      const originalDocuments = allDocumentQueries
-        .flatMap(([, data]) => (data as Document[] | undefined) ?? [])
-        .filter((document: any) =>
-          originalMessagesIds.includes(document.messageId)
-        );
-      const newId = generateUUID();
-      await cloneAnonymousChat(
-        originalMessages.map((message) =>
-          chatMessageToDbMessage(message, chatId)
-        ),
-        originalChat,
-        originalDocuments as Document[],
-        newId
-      );
-      return { chatId: newId } as const;
-    },
+  return useMutation({
+    ...cloneChatMutationOptions,
     onSettled: async () => {
       await queryClient.refetchQueries({ queryKey: getAllChatsQueryKey });
     },
@@ -399,14 +339,10 @@ export function useCloneChat() {
 }
 
 export function useSaveMessageMutation() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const { saveChat: saveChatWithTitle } = useSaveChat();
 
-  return useDualMutation({
-    shouldUseLocal: () => !isAuthenticated,
+  return useMutation({
     mutationFn: async ({
       message: _message,
       chatId: _chatId,
@@ -414,17 +350,6 @@ export function useSaveMessageMutation() {
       message: ChatMessage;
       chatId: string;
     }) => {
-      // Posting chats persists via server side; local cache updates handled in onMutateAction
-      return { success: true } as const;
-    },
-    localMutationFn: async ({
-      message,
-      chatId,
-    }: {
-      message: ChatMessage;
-      chatId: string;
-    }) => {
-      await saveAnonymousMessage(chatMessageToDbMessage(message, chatId));
       return { success: true } as const;
     },
     onMutate: async ({ message, chatId }) => {
@@ -450,26 +375,11 @@ export function useSaveMessageMutation() {
       console.error("Failed to save message:", err);
       toast.error("Failed to save message");
     },
-    onSuccess: (_data, { message, chatId }, _ctx) => {
-      if (isAuthenticated) {
-        if (message.role === "assistant") {
-          queryClient.invalidateQueries({
-            queryKey: trpc.credits.getAvailableCredits.queryKey(),
-          });
-        }
-      } else {
-        const messagesQueryKey = trpc.chat.getChatMessages.queryKey({ chatId });
-        const messages =
-          queryClient.getQueryData<ChatMessage[]>(messagesQueryKey);
-        if ((messages?.length ?? 0) === 1) {
-          saveChatWithTitle(
-            chatId,
-            getTextContentFromMessage(message),
-            isAuthenticated
-          );
-        }
-      }
+    onSuccess: (_data, { message }) => {
       if (message.role === "assistant") {
+        queryClient.invalidateQueries({
+          queryKey: trpc.credits.getAvailableCredits.queryKey(),
+        });
         queryClient.invalidateQueries({
           queryKey: trpc.chat.getAllChats.queryKey(),
         });
@@ -479,8 +389,6 @@ export function useSaveMessageMutation() {
 }
 
 export function useSetVisibility() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -494,23 +402,8 @@ export function useSetVisibility() {
     [trpc.chat.setVisibility]
   );
 
-  return useDualMutation({
+  return useMutation({
     ...setVisibilityMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({
-      chatId,
-      visibility,
-    }: {
-      chatId: string;
-      visibility: "private" | "public";
-    }) => {
-      const chat = await loadAnonymousChatById(chatId);
-      if (!chat) {
-        throw new Error("Chat not found");
-      }
-      await saveAnonymousChatToStorage({ ...chat, visibility });
-      return { success: true } as const;
-    },
     onError: () => {
       toast.error("Failed to update chat visibility");
     },
@@ -541,35 +434,14 @@ export function useSaveDocument(
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const userId = session?.user?.id;
-  const isAuthenticated = !!session?.user;
-  const anonymousSession = getAnonymousSession();
 
   const saveDocumentMutationOptions = useMemo(
     () => trpc.document.saveDocument.mutationOptions(),
     [trpc.document.saveDocument]
   );
 
-  return useDualMutation({
+  return useMutation({
     ...saveDocumentMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async (newDocument: {
-      id: string;
-      title: string;
-      content: string;
-      kind: Document["kind"];
-    }) => {
-      const documentToSave = {
-        id: newDocument.id,
-        createdAt: new Date(),
-        title: newDocument.title,
-        content: newDocument.content,
-        kind: newDocument.kind,
-        userId: anonymousSession?.id || "",
-        messageId,
-      } satisfies Document;
-      await saveAnonymousDocument(documentToSave);
-      return { success: true } as const;
-    },
     onMutate: async (newDocument: {
       id: string;
       title: string;
@@ -590,7 +462,7 @@ export function useSaveDocument(
           title: newDocument.title,
           content: newDocument.content,
           kind: newDocument.kind as Document["kind"],
-          userId: isAuthenticated ? userId || "" : anonymousSession?.id || "",
+          userId: userId || "",
           messageId,
         } as Document,
       ];
@@ -623,78 +495,40 @@ export function useSaveDocument(
 export function useDocuments(id: string, disable: boolean) {
   const trpc = useTRPC();
   const { type } = useChatId();
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
 
-  const documentsQueryOptions = useDualQueryOptions({
-    ...(type === "shared"
-      ? trpc.document.getPublicDocuments.queryOptions({ id })
-      : trpc.document.getDocuments.queryOptions({ id })),
-    localQueryFn:
-      type !== "shared"
-        ? async () => await loadAnonymousDocumentsByDocumentId(id || "")
-        : undefined,
-    shouldUseLocal: () => type !== "shared" && !isAuthenticated,
+  const queryOptions = useMemo(
+    () =>
+      type === "shared"
+        ? trpc.document.getPublicDocuments.queryOptions({ id })
+        : trpc.document.getDocuments.queryOptions({ id }),
+    [type, trpc.document, id]
+  );
+
+  return useQuery({
+    ...queryOptions,
     enabled: !disable && !!id,
   });
-
-  return useQuery(documentsQueryOptions);
 }
 
 export function useGetAllChats(limit?: number) {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
-  const getAllChatsQueryOptions = useDualQueryOptions({
-    ...trpc.chat.getAllChats.queryOptions(),
-    localQueryFn: async () => {
-      const chats = await loadAnonymousChatsFromStorage();
-      return chats.map(
-        (chat) =>
-          ({
-            id: chat.id,
-            createdAt: chat.createdAt,
-            updatedAt: chat.updatedAt || chat.createdAt,
-            title: chat.title,
-            visibility: chat.visibility,
-            userId: "",
-            isPinned: chat.isPinned,
-          }) satisfies UIChat
-      );
-    },
-    shouldUseLocal: () => !isAuthenticated,
+  const queryOptions = trpc.chat.getAllChats.queryOptions();
+
+  return useQuery({
+    ...queryOptions,
     select: limit ? (data: UIChat[]) => data.slice(0, limit) : undefined,
   });
-
-  return useQuery(getAllChatsQueryOptions);
 }
 
 export function useGetChatByIdQueryOptions(chatId: string) {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
-  const baseQueryOptions = trpc.chat.getChatById.queryOptions({ chatId });
-
-  const getChatByIdQueryOptions = useMemo(
+  return useMemo(
     () => ({
-      ...baseQueryOptions,
-      ...(isAuthenticated
-        ? {}
-        : {
-            queryFn: async () => {
-              const chat = await loadAnonymousChatById(chatId);
-              if (!chat) {
-                throw new Error("Chat not found");
-              }
-              return chat;
-            },
-          }),
+      ...trpc.chat.getChatById.queryOptions({ chatId }),
       enabled: !!chatId,
     }),
-    [baseQueryOptions, isAuthenticated, chatId]
+    [trpc.chat.getChatById, chatId]
   );
-
-  return getChatByIdQueryOptions;
 }
 
 export function useGetChatById(chatId: string) {

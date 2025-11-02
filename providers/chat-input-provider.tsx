@@ -12,7 +12,7 @@ import React, {
 } from "react";
 import type { LexicalChatInputRef } from "@/components/lexical-chat-input";
 import type { AppModelId } from "@/lib/ai/app-models";
-import { getAppModelDefinition } from "@/lib/ai/app-models";
+import { DEFAULT_CHAT_MODEL, getAppModelDefinition } from "@/lib/ai/app-models";
 import type { Attachment, UiToolName } from "@/lib/ai/types";
 import { useDefaultModel, useModelChange } from "./default-model-provider";
 
@@ -81,9 +81,9 @@ export function ChatInputProvider({
   const defaultModel = useDefaultModel();
   const changeModel = useModelChange();
 
-  // Initialize selectedModelId from override or default model
+  // Initialize selectedModelId - always use DEFAULT_CHAT_MODEL
   const [selectedModelId, setSelectedModelId] = useState<AppModelId>(
-    overrideModelId || defaultModel
+    DEFAULT_CHAT_MODEL
   );
 
   const [selectedTool, setSelectedTool] = useState<UiToolName | null>(

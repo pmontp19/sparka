@@ -44,7 +44,6 @@ import { useChatInput } from "@/providers/chat-input-provider";
 import { useSession } from "@/providers/session-provider";
 import { ImageModal } from "./image-modal";
 import { LexicalChatInput } from "./lexical-chat-input";
-import { ModelSelector } from "./model-selector";
 import { ResponsiveTools } from "./responsive-tools";
 import { SuggestedActions } from "./suggested-actions";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -702,11 +701,6 @@ function PureChatInputBottomControls({
     <PromptInputToolbar className="flex w-full min-w-0 flex-row justify-between @[400px]:gap-2 gap-1 border-t">
       <PromptInputTools className="flex min-w-0 items-center @[400px]:gap-2 gap-1">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
-        <ModelSelector
-          className="@[400px]:h-10 h-8 w-fit max-w-none shrink justify-start truncate @[400px]:px-3 px-2 @[400px]:text-sm text-xs"
-          onModelChangeAction={onModelChange}
-          selectedModelId={selectedModelId}
-        />
         <ResponsiveTools
           selectedModelId={selectedModelId}
           setTools={setSelectedTool}

@@ -19,7 +19,7 @@ export default async function ChatLayout({
 }) {
   const raw = await auth.api.getSession({ headers: await headers() });
   if (!raw?.user?.id) {
-    redirect("/api/auth/signin");
+    redirect("/signin");
   }
 
   const cookieStore = await cookies();
