@@ -29,13 +29,7 @@ import { calculateMessagesTokens } from "@/lib/ai/token-utils";
 import { getTools } from "@/lib/ai/tools/tools";
 import { allTools, toolsDefinitions } from "@/lib/ai/tools/tools-definitions";
 import type { ChatMessage, StreamWriter, ToolName } from "@/lib/ai/types";
-import {
-  createAnonymousSession,
-  getAnonymousSession,
-  setAnonymousSession,
-} from "@/lib/anonymous-session-server";
 import { auth } from "@/lib/auth";
-import type { CreditReservation } from "@/lib/credits/credit-reservation";
 import {
   filterAffordableTools,
   getBaseModelCostByModelId,
@@ -51,11 +45,8 @@ import {
 import { env } from "@/lib/env";
 import { MAX_INPUT_TOKENS } from "@/lib/limits/tokens";
 import { createModuleLogger } from "@/lib/logger";
-import type { AnonymousSession } from "@/lib/types/anonymous";
-import { ANONYMOUS_LIMITS } from "@/lib/types/anonymous";
 import { generateUUID } from "@/lib/utils";
 import { replaceFilePartUrlByBinaryDataInMessages } from "@/lib/utils/download-assets";
-import { checkAnonymousRateLimit, getClientIP } from "@/lib/utils/rate-limit";
 import { generateTitleFromUserMessage } from "../../actions";
 import { addExplicitToolRequestToMessages } from "./addExplicitToolRequestToMessages";
 import { filterReasoningParts } from "./filterReasoningParts";
@@ -186,87 +177,27 @@ export async function POST(request: NextRequest) {
 
     const session = await auth.api.getSession({ headers: await headers() });
 
-    const userId = session?.user?.id || null;
-    const isAnonymous = userId === null;
-    let anonymousSession: AnonymousSession | null = null;
-
-    // Check for anonymous users
-
-    if (userId) {
-      // TODO: Consider if checking if user exists is really needed
-      const user = await getUserById({ userId });
-      if (!user) {
-        log.warn("User not found");
-        return new Response("User not found", { status: 404 });
-      }
-    } else {
-      // Apply rate limiting for anonymous users
-      const clientIP = getClientIP(request);
-      const rateLimitResult = await checkAnonymousRateLimit(
-        clientIP,
-        redisPublisher
+    const userId = session?.user?.id;
+    if (!userId) {
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized. Please log in to continue.",
+          type: "UNAUTHORIZED",
+        }),
+        {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
       );
+    }
 
-      if (!rateLimitResult.success) {
-        log.warn({ clientIP }, "Rate limit exceeded");
-        return new Response(
-          JSON.stringify({
-            error: rateLimitResult.error,
-            type: "RATE_LIMIT_EXCEEDED",
-          }),
-          {
-            status: 429,
-            headers: {
-              "Content-Type": "application/json",
-              ...(rateLimitResult.headers || {}),
-            },
-          }
-        );
-      }
-
-      anonymousSession = await getAnonymousSession();
-      if (!anonymousSession) {
-        anonymousSession = await createAnonymousSession();
-      }
-
-      // Check message limits
-      if (anonymousSession.remainingCredits <= 0) {
-        log.info("Anonymous message limit reached");
-        return new Response(
-          JSON.stringify({
-            error: `You've used all ${ANONYMOUS_LIMITS.CREDITS} free messages. Sign up to continue chatting with unlimited access!`,
-            type: "ANONYMOUS_LIMIT_EXCEEDED",
-            maxMessages: ANONYMOUS_LIMITS.CREDITS,
-            suggestion:
-              "Create an account to get unlimited messages and access to more AI models",
-          }),
-          {
-            status: 402,
-            headers: {
-              "Content-Type": "application/json",
-              ...(rateLimitResult.headers || {}),
-            },
-          }
-        );
-      }
-
-      // Validate model for anonymous users
-      if (!ANONYMOUS_LIMITS.AVAILABLE_MODELS.includes(selectedModelId as any)) {
-        log.warn("Model not available for anonymous users");
-        return new Response(
-          JSON.stringify({
-            error: "Model not available for anonymous users",
-            availableModels: ANONYMOUS_LIMITS.AVAILABLE_MODELS,
-          }),
-          {
-            status: 403,
-            headers: {
-              "Content-Type": "application/json",
-              ...(rateLimitResult.headers || {}),
-            },
-          }
-        );
-      }
+    // TODO: Consider if checking if user exists is really needed
+    const user = await getUserById({ userId });
+    if (!user) {
+      log.warn("User not found");
+      return new Response("User not found", { status: 404 });
     }
 
     // Extract selectedTool from user message metadata
@@ -344,36 +275,24 @@ export async function POST(request: NextRequest) {
 
     const baseModelCost = getBaseModelCostByModelId(selectedModelId);
 
-    let reservation: CreditReservation | null = null;
+    const { reservation, error: creditError } = await getCreditReservation(
+      userId,
+      baseModelCost
+    );
 
-    if (!isAnonymous) {
-      const { reservation: res, error: creditError } =
-        await getCreditReservation(userId, baseModelCost);
-
-      if (creditError) {
-        console.log(
-          "RESPONSE > POST /api/chat: Credit reservation error:",
-          creditError
-        );
-        return new Response(creditError, {
-          status: 402,
-        });
-      }
-
-      reservation = res;
-    } else if (anonymousSession) {
-      // Increment message count and update session
-      anonymousSession.remainingCredits -= baseModelCost;
-      await setAnonymousSession(anonymousSession);
+    if (creditError) {
+      console.log(
+        "RESPONSE > POST /api/chat: Credit reservation error:",
+        creditError
+      );
+      return new Response(creditError, {
+        status: 402,
+      });
     }
 
     let activeTools: ToolName[] = filterAffordableTools(
-      isAnonymous ? ANONYMOUS_LIMITS.AVAILABLE_TOOLS : allTools,
-      isAnonymous
-        ? ANONYMOUS_LIMITS.CREDITS
-        : reservation
-          ? reservation.budget - baseModelCost
-          : 0
+      allTools,
+      reservation ? reservation.budget - baseModelCost : 0
     );
 
     // Disable all tools for models with unspecified features
@@ -431,12 +350,10 @@ export async function POST(request: NextRequest) {
       return error.toResponse();
     }
 
-    const messageThreadToParent = isAnonymous
-      ? anonymousPreviousMessages
-      : await getThreadUpToMessageId(
-          chatId,
-          userMessage.metadata.parentMessageId
-        );
+    const messageThreadToParent = await getThreadUpToMessageId(
+      chatId,
+      userMessage.metadata.parentMessageId
+    );
 
     const messages = [...messageThreadToParent, userMessage].slice(-5);
 
@@ -475,9 +392,7 @@ export async function POST(request: NextRequest) {
 
       // Record this new stream so we can resume later - use Redis for all users
       if (redisPublisher) {
-        const keyPrefix = isAnonymous
-          ? `sparka-ai:anonymous-stream:${chatId}:${streamId}`
-          : `sparka-ai:stream:${chatId}:${streamId}`;
+        const keyPrefix = `sparka-ai:stream:${chatId}:${streamId}`;
 
         await redisPublisher.setEx(
           keyPrefix,
@@ -486,9 +401,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!isAnonymous) {
-        // Save placeholder assistant message immediately (needed for document creation)
-        await saveMessage({
+      // Save placeholder assistant message immediately (needed for document creation)
+      await saveMessage({
           _message: {
             id: messageId,
             chatId,
@@ -686,10 +600,6 @@ export async function POST(request: NextRequest) {
           if (reservation) {
             reservation.cleanup();
           }
-          if (anonymousSession) {
-            anonymousSession.remainingCredits += baseModelCost;
-            setAnonymousSession(anonymousSession);
-          }
           return "Oops, an error occured!";
         },
       });
@@ -715,9 +625,7 @@ export async function POST(request: NextRequest) {
         try {
           // Clean up stream info from Redis for all users
           if (redisPublisher) {
-            const keyPrefix = isAnonymous
-              ? `sparka-ai:anonymous-stream:${chatId}:${streamId}`
-              : `sparka-ai:stream:${chatId}:${streamId}`;
+            const keyPrefix = `sparka-ai:stream:${chatId}:${streamId}`;
 
             await redisPublisher.expire(keyPrefix, 300);
           }
@@ -755,10 +663,6 @@ export async function POST(request: NextRequest) {
       log.error({ error }, "error found in try block");
       if (reservation) {
         await reservation.cleanup();
-      }
-      if (anonymousSession) {
-        anonymousSession.remainingCredits += baseModelCost;
-        setAnonymousSession(anonymousSession);
       }
       throw error;
     }

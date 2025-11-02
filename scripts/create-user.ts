@@ -13,9 +13,20 @@
  *   API_URL=http://localhost:3000 bun run scripts/create-user.ts
  */
 
-import { env } from "@/lib/env";
+// Load .env file
+import "dotenv/config";
+
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+
+// Get admin secret directly from env (avoid validating all project env vars)
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+
+if (!ADMIN_SECRET) {
+  console.error("❌ ADMIN_SECRET environment variable is required");
+  console.error("Add it to your .env file or set it in your environment");
+  process.exit(1);
+}
 
 async function createUser(email: string, password: string, name: string) {
   try {
@@ -26,7 +37,7 @@ async function createUser(email: string, password: string, name: string) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-secret": env.ADMIN_SECRET,
+        "x-admin-secret": ADMIN_SECRET as string,
       },
       body: JSON.stringify({ email, password, name }),
     });

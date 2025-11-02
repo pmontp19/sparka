@@ -1,40 +1,19 @@
 "use client";
 
-// Hooks that are used to mutate the chat store
-// They use local storage functions from '@/lib/utils/anonymous-chat-storage' for anonymous users
-// They use tRPC mutations for authenticated users
+// Hooks that are used to mutate the chat store via tRPC mutations for authenticated users
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { useDualMutation } from "@/hooks/use-dual-mutation";
-import { useDualQueryOptions } from "@/hooks/use-dual-query";
 import type { ChatMessage } from "@/lib/ai/types";
-import { getAnonymousSession } from "@/lib/anonymous-session-client";
 import type { Document } from "@/lib/db/schema";
 import {
   chatMessageToDbMessage,
   dbMessageToChatMessage,
 } from "@/lib/message-conversion";
-import { ANONYMOUS_LIMITS } from "@/lib/types/anonymous";
 import type { UIChat } from "@/lib/types/uiChat";
 import { generateUUID, getTextContentFromMessage } from "@/lib/utils";
-import {
-  cloneAnonymousChat,
-  deleteAnonymousChat,
-  deleteAnonymousTrailingMessages,
-  loadAnonymousChatById,
-  loadAnonymousChatsFromStorage,
-  loadAnonymousDocumentsByDocumentId,
-  loadLocalAnonymousMessagesByChatId,
-  pinAnonymousChat,
-  renameAnonymousChat,
-  saveAnonymousChatToStorage,
-  saveAnonymousDocument,
-  saveAnonymousMessage,
-} from "@/lib/utils/anonymous-chat-storage";
 import { useChatId } from "@/providers/chat-id-provider";
-import { useSession } from "@/providers/session-provider";
 import { useTRPC } from "@/trpc/react";
 
 export function useSaveChat() {
@@ -112,8 +91,6 @@ export function useSaveChat() {
 }
 
 export function useGetChatMessagesQueryOptions() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const { id: chatId, type } = useChatId();
   const baseQueryOptions = trpc.chat.getChatMessages.queryOptions({
@@ -123,19 +100,9 @@ export function useGetChatMessagesQueryOptions() {
   const getMessagesByChatIdQueryOptions = useMemo(
     () => ({
       ...baseQueryOptions,
-      ...(isAuthenticated
-        ? {}
-        : {
-            queryFn: async () => {
-              const messages = await loadLocalAnonymousMessagesByChatId(
-                chatId || ""
-              );
-              return messages.map(dbMessageToChatMessage);
-            },
-          }),
-      enabled: !!chatId && (isAuthenticated ? type === "chat" : true),
+      enabled: !!chatId && type === "chat",
     }),
-    [baseQueryOptions, isAuthenticated, chatId, type]
+    [baseQueryOptions, chatId, type]
   );
 
   return getMessagesByChatIdQueryOptions;
@@ -152,8 +119,6 @@ type ChatMutationOptions = {
   onError?: (error: Error) => void;
 };
 export function useDeleteChat() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const qc = useQueryClient();
 
@@ -167,14 +132,8 @@ export function useDeleteChat() {
     [trpc.chat.deleteChat]
   );
 
-  // Use dual mutation to unify local/API behavior and keep optimistic updates centralized
-  const deleteMutation = useDualMutation({
+  const deleteMutation = useMutation({
     ...deleteChatMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({ chatId }: { chatId: string }) => {
-      await deleteAnonymousChat(chatId);
-      return { success: true } as const;
-    },
     onMutate: async ({ chatId }: { chatId: string }) => {
       await qc.cancelQueries({ queryKey: getAllChatsQueryKey });
       const previousChats = qc.getQueryData<UIChat[]>(getAllChatsQueryKey);
@@ -216,8 +175,6 @@ export function useDeleteChat() {
 }
 
 export function useRenameChat() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const queryClient = useQueryClient();
   const trpc = useTRPC();
 
@@ -231,18 +188,8 @@ export function useRenameChat() {
     [trpc.chat.renameChat]
   );
 
-  const renameMutation = useDualMutation({
+  const renameMutation = useMutation({
     ...renameChatMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({
-      chatId,
-      title,
-    }: {
-      chatId: string;
-      title: string;
-    }) => {
-      await renameAnonymousChat(chatId, title);
-    },
     onMutate: async ({ chatId, title }: { chatId: string; title: string }) => {
       await queryClient.cancelQueries({ queryKey: getAllChatsQueryKey });
       const previousChats =
@@ -271,8 +218,6 @@ export function useRenameChat() {
 }
 
 export function usePinChat() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -286,19 +231,8 @@ export function usePinChat() {
     [trpc.chat.setIsPinned]
   );
 
-  const pinMutation = useDualMutation({
+  const pinMutation = useMutation({
     ...setIsPinnedMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({
-      chatId,
-      isPinned,
-    }: {
-      chatId: string;
-      isPinned: boolean;
-    }) => {
-      await pinAnonymousChat(chatId, isPinned);
-      return { success: true } as const;
-    },
     onMutate: async ({
       chatId,
       isPinned,
@@ -333,8 +267,6 @@ export function usePinChat() {
 }
 
 export function useDeleteTrailingMessages() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -352,18 +284,9 @@ export function useDeleteTrailingMessages() {
     [queryClient, trpc.chat.getChatMessages]
   );
 
-  // Delete trailing messages mutation (dual: API vs anonymous local)
-  const deleteTrailingMessagesMutation = useDualMutation({
+  // Delete trailing messages mutation
+  const deleteTrailingMessagesMutation = useMutation({
     ...deleteTrailingMutationOptions,
-    shouldUseLocal: () => !isAuthenticated,
-    localMutationFn: async ({
-      messageId,
-    }: {
-      messageId: string;
-      chatId: string;
-    }) => {
-      await deleteAnonymousTrailingMessages(messageId);
-    },
     onMutate: async ({
       messageId,
       chatId,
@@ -780,27 +703,11 @@ export function useGetChatById(chatId: string) {
 }
 
 export function useGetCredits() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
   const trpc = useTRPC();
 
-  const queryOptions = useDualQueryOptions({
-    ...trpc.credits.getAvailableCredits.queryOptions(),
-    localQueryFn: async () => {
-      const anonymousSession = getAnonymousSession();
-      return {
-        totalCredits:
-          anonymousSession?.remainingCredits ?? ANONYMOUS_LIMITS.CREDITS,
-        availableCredits:
-          anonymousSession?.remainingCredits ?? ANONYMOUS_LIMITS.CREDITS,
-        reservedCredits: 0,
-      };
-    },
-    shouldUseLocal: () => !isAuthenticated,
-  });
-
-  const { data: creditsData, isLoading: isLoadingCredits } =
-    useQuery(queryOptions);
+  const { data: creditsData, isLoading: isLoadingCredits } = useQuery(
+    trpc.credits.getAvailableCredits.queryOptions()
+  );
 
   return {
     credits: (creditsData as { totalCredits: number } | undefined)

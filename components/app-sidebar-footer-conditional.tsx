@@ -18,7 +18,7 @@ export function AppSidebarFooterConditional() {
     <>
       <SidebarSeparator />
       <SidebarFooter className="shrink-0">
-        <SidebarCredits />
+        {/* <SidebarCredits /> */}
       </SidebarFooter>
     </>
   );

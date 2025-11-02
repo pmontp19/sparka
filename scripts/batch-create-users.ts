@@ -13,10 +13,21 @@
  *   API_URL=https://your-domain.com bun run scripts/batch-create-users.ts
  */
 
-import { env } from "@/lib/env";
+// Load .env file
+import "dotenv/config";
+
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { randomBytes } from "node:crypto";
+
+// Get admin secret directly from env (avoid validating all project env vars)
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+
+if (!ADMIN_SECRET) {
+  console.error("❌ ADMIN_SECRET environment variable is required");
+  console.error("Add it to your .env file or set it in your environment");
+  process.exit(1);
+}
 
 interface UserCredentials {
   number: number;
@@ -50,15 +61,32 @@ async function createUser(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-secret": env.ADMIN_SECRET,
+        "x-admin-secret": ADMIN_SECRET as string,
       },
       body: JSON.stringify({ email, password, name }),
     });
 
-    const result = await response.json();
+    // Check if response has content
+    const text = await response.text();
+    if (!text) {
+      return {
+        success: false,
+        error: `Empty response (${response.status} ${response.statusText})`,
+      };
+    }
+
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: `Invalid JSON response: ${text.slice(0, 100)}`,
+      };
+    }
 
     if (!response.ok || result.error) {
-      return { success: false, error: result.error };
+      return { success: false, error: result.error || text.slice(0, 100) };
     }
 
     return { success: true, userId: result.user.id };
@@ -184,32 +212,28 @@ async function main() {
   try {
     console.log("=== Batch Create Users ===\n");
 
-    const baseName = await rl.question("Base username (e.g., 'user'): ");
-    if (!baseName) {
-      console.error("❌ Base username is required");
-      process.exit(1);
-    }
+    const baseNameInput = await rl.question("Base username (user): ");
+    const baseName = baseNameInput.trim() || "user";
 
-    const startNumberStr = await rl.question(
-      "Starting number (e.g., '1'): "
-    );
-    const startNumber = Number.parseInt(startNumberStr, 10);
+    const startNumberInput = await rl.question("Starting number (1): ");
+    const startNumber = startNumberInput.trim()
+      ? Number.parseInt(startNumberInput, 10)
+      : 1;
     if (Number.isNaN(startNumber) || startNumber < 0) {
       console.error("❌ Invalid starting number");
       process.exit(1);
     }
 
-    const countStr = await rl.question("Number of users to create: ");
-    const count = Number.parseInt(countStr, 10);
+    const countInput = await rl.question("Number of users to create (10): ");
+    const count = countInput.trim() ? Number.parseInt(countInput, 10) : 10;
     if (Number.isNaN(count) || count < 1 || count > 100) {
       console.error("❌ Count must be between 1 and 100");
       process.exit(1);
     }
 
-    const emailDomain = await rl.question(
-      "Email domain (e.g., 'example.com'): "
-    );
-    if (!emailDomain || !emailDomain.includes(".")) {
+    const emailDomainInput = await rl.question("Email domain (example.com): ");
+    const emailDomain = emailDomainInput.trim() || "example.com";
+    if (!emailDomain.includes(".")) {
       console.error("❌ Valid email domain is required");
       process.exit(1);
     }
