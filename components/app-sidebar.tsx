@@ -1,5 +1,3 @@
-import { Cpu } from "lucide-react";
-import Link from "next/link";
 import { NewChatButton } from "@/components/new-chat-button";
 import { SearchChatsButton } from "@/components/search-chats";
 import { SidebarTopRow } from "@/components/sidebar-top-row";
@@ -9,7 +7,6 @@ import {
   SidebarContent,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
@@ -32,16 +29,6 @@ export function AppSidebar() {
 
           <SidebarMenuItem>
             <SearchChatsButton />
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Models">
-              <Link href="https://airegistry.app" target="_blank" rel="noopener noreferrer" className="flex items-center">
-                <Cpu className="size-4" />
-                <span className="group-data-[collapsible=icon]:hidden">
-                  Models
-                </span>
-              </Link>
-            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

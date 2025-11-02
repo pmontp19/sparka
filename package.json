@@ -18,6 +18,8 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
+    "create-user": "tsx scripts/create-user.ts",
+    "batch-create-users": "tsx scripts/batch-create-users.ts",
     "test": "bun test:playwright && bun test:unit",
     "test:playwright": "export PLAYWRIGHT=True && bunx playwright test --workers=4",
     "test:unit": "vitest run",

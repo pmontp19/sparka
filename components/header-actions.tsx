@@ -22,17 +22,7 @@ function PureHeaderActions({ user }: { user?: Session["user"] }) {
 
   return (
     <div className="flex items-center gap-2">
-      <Button asChild size="icon" type="button" variant="ghost">
-        <a
-          className="flex items-center justify-center"
-          href="https://github.com/franciscomoretti/sparka"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <GitIcon size={20} />
-        </a>
-      </Button>
-
+      
       {isAuthenticated && effectiveUser ? (
         <HeaderUserNav user={effectiveUser} />
       ) : (

@@ -10,11 +10,8 @@ export const env = createEnv({
     AUTH_SECRET: z.string().min(1),
     BLOB_READ_WRITE_TOKEN: z.string().min(1),
 
-    // One of the authentication providers must be configured
-    AUTH_GOOGLE_ID: z.string().optional(),
-    AUTH_GOOGLE_SECRET: z.string().optional(),
-    AUTH_GITHUB_ID: z.string().optional(),
-    AUTH_GITHUB_SECRET: z.string().optional(),
+    // Admin secret for protected operations
+    ADMIN_SECRET: z.string().min(1),
 
     // One of the AI Gateway API key or Vercel OIDC token must be configured
     AI_GATEWAY_API_KEY: z.string().optional(),
@@ -39,15 +36,6 @@ export const env = createEnv({
   experimental__runtimeEnv: {},
 });
 
-if (
-  typeof window === "undefined" &&
-  !(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET) &&
-  !(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET)
-) {
-  throw new Error(
-    "No social auth providers configured: enable Google by setting AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET, or enable GitHub by setting AUTH_GITHUB_ID and AUTH_GITHUB_SECRET."
-  );
-}
 
 // VERCEL_OIDC_TOKEN is not set on Middleware so this can't be a runtime error
 // if (

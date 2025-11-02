@@ -51,8 +51,7 @@ export type SiteConfig = {
     };
   };
   authentication: {
-    google: boolean;
-    github: boolean;
+    emailPassword: boolean;
   };
 };
 
@@ -111,7 +110,6 @@ export const siteConfig: SiteConfig = {
     },
   },
   authentication: {
-    google: Boolean(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET),
-    github: Boolean(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET),
+    emailPassword: true,
   },
 };

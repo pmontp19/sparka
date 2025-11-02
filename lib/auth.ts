@@ -22,30 +22,23 @@ export const auth = betterAuth({
   }),
   trustedOrigins: env.VERCEL_URL ? [env.VERCEL_URL] : undefined,
   secret: env.AUTH_SECRET,
-
-  socialProviders: (() => {
-    const googleId = env.AUTH_GOOGLE_ID;
-    const googleSecret = env.AUTH_GOOGLE_SECRET;
-    const githubId = env.AUTH_GITHUB_ID;
-    const githubSecret = env.AUTH_GITHUB_SECRET;
-
-    const google =
-      typeof googleId === "string" &&
-      googleId.length > 0 &&
-      typeof googleSecret === "string" &&
-      googleSecret.length > 0
-        ? { clientId: googleId, clientSecret: googleSecret }
-        : undefined;
-
-    const github =
-      typeof githubId === "string" &&
-      githubId.length > 0 &&
-      typeof githubSecret === "string" &&
-      githubSecret.length > 0
-        ? { clientId: githubId, clientSecret: githubSecret }
-        : undefined;
-
-    return { google, github } as const;
-  })(),
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
   plugins: [nextCookies()],
+  advanced: {
+    hooks: {
+      // Disable public signup - only allow via admin script
+      signUp: {
+        before: async (ctx) => {
+          // Check if request has admin secret token
+          const adminSecret = ctx.headers?.get("x-admin-secret");
+          if (adminSecret !== env.ADMIN_SECRET) {
+            throw new Error("Public signup is disabled. Contact administrator.");
+          }
+        },
+      },
+    },
+  },
 });
