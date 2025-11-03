@@ -200,6 +200,8 @@ export async function POST(request: NextRequest) {
       return new Response("User not found", { status: 404 });
     }
 
+    const isAnonymous = (anonymousPreviousMessages ?? []).length > 0;
+
     // Extract selectedTool from user message metadata
     const selectedTool = userMessage.metadata.selectedTool || null;
     log.debug({ selectedTool }, "selectedTool");
@@ -403,22 +405,21 @@ export async function POST(request: NextRequest) {
 
       // Save placeholder assistant message immediately (needed for document creation)
       await saveMessage({
-          _message: {
-            id: messageId,
-            chatId,
-            role: "assistant",
-            lastContext: undefined,
-            parts: [], // Empty placeholder
-            attachments: [],
-            createdAt: new Date(),
-            annotations: [],
-            isPartial: true,
-            parentMessageId: userMessage.id,
-            selectedModel: selectedModelId,
-            selectedTool: null,
-          },
-        });
-      }
+        _message: {
+          id: messageId,
+          chatId,
+          role: "assistant",
+          lastContext: undefined,
+          parts: [], // Empty placeholder
+          attachments: [],
+          createdAt: new Date(),
+          annotations: [],
+          isPartial: true,
+          parentMessageId: userMessage.id,
+          selectedModel: selectedModelId,
+          selectedTool: null,
+        },
+      });
 
       // Build the data stream that will emit tokens
       const stream = createUIMessageStream<ChatMessage>({
@@ -550,7 +551,6 @@ export async function POST(request: NextRequest) {
 
                   return acc + toolDef.cost;
                 }, 0);
-            const _assistantMessage = responseMessage; // TODO: Fix this in ai sdk v5 - responseMessage is not a UIMessage
             try {
               // TODO: Validate if this is correct ai sdk v5
               const assistantMessage = messages.at(-1);
