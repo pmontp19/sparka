@@ -31,11 +31,6 @@ export const toolsDefinitions: Record<ToolName, ToolDefinition> = {
   //   description: 'Search with reasoning',
   //   cost: 50,
   // },
-  retrieve: {
-    name: "retrieve",
-    description: "Retrieve information from the web",
-    cost: 1,
-  },
   webSearch: {
     name: "webSearch",
     description: "Search the web",

@@ -303,26 +303,26 @@ function PureMessagePart({
     }
   }
 
-  if (type === "tool-retrieve") {
-    const { toolCallId, state } = part;
-    if (state === "input-available") {
-      return (
-        <div key={toolCallId}>
-          <Retrieve />
-        </div>
-      );
-    }
+  // if (type === "tool-retrieve") {
+  //   const { toolCallId, state } = part;
+  //   if (state === "input-available") {
+  //     return (
+  //       <div key={toolCallId}>
+  //         <Retrieve />
+  //       </div>
+  //     );
+  //   }
 
-    if (state === "output-available") {
-      const { output } = part;
-      return (
-        <div key={toolCallId}>
-          {/* @ts-expect-error - TODO: fix this */}
-          <Retrieve result={output} />
-        </div>
-      );
-    }
-  }
+  //   if (state === "output-available") {
+  //     const { output } = part;
+  //     return (
+  //       <div key={toolCallId}>
+  //         {/* @ts-expect-error - TODO: fix this */}
+  //         <Retrieve result={output} />
+  //       </div>
+  //     );
+  //   }
+  // }
 
   if (type === "tool-readDocument") {
     const { toolCallId, state } = part;

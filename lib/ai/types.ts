@@ -27,7 +27,6 @@ export const toolNameSchema = z.enum([
   "updateDocument",
   "requestSuggestions",
   "readDocument",
-  "retrieve",
   "webSearch",
   "stockChart",
   "codeInterpreter",
@@ -85,7 +84,6 @@ export type ChatTools = {
   webSearch: webSearchTool;
   stockChart: stockChartTool;
   codeInterpreter: codeInterpreterTool;
-  retrieve: retrieveTool;
 };
 
 type FollowupSuggestions = {
