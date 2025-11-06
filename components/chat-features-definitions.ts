@@ -39,7 +39,7 @@ export const toolDefinitions: Record<UiToolName, ToolDefinition> = {
   },
   createDocument: {
     key: "createDocument",
-    name: "Write or code",
+    name: "Write",
     description: "Create documents, code, or run code in a sandbox.",
     icon: Edit3,
     shortName: "Write",
@@ -49,6 +49,6 @@ export const toolDefinitions: Record<UiToolName, ToolDefinition> = {
 export const enabledTools: UiToolName[] = [
   "webSearch",
   "deepResearch",
-  "generateImage",
+  // "generateImage",
   "createDocument",
 ];

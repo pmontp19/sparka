@@ -59,7 +59,7 @@ export function getTools({
     //   session,
     //   dataStream,
     // }),
-    retrieve,
+    // retrieve,
     ...(siteConfig.integrations.webSearch
       ? {
           webSearch: tavilyWebSearch({

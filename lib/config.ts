@@ -96,7 +96,7 @@ export const siteConfig: SiteConfig = {
   },
   legal: {
     minimumAge: 13,
-    governingLaw: "United States",
+    governingLaw: "Spain",
     refundPolicy: "no-refunds",
   },
   policies: {
