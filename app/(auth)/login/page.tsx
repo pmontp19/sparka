@@ -1,9 +1,5 @@
-import { ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Login",
@@ -12,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="container mx-auto flex h-dvh w-screen flex-col items-center justify-center">
-      <div className="mx-auto flex w-full flex-col items-center justify-center sm:w-[420px]">
+    <div className="flex min-h-dvh items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-6xl mx-auto">
         <LoginForm className="w-full" />
       </div>
     </div>
