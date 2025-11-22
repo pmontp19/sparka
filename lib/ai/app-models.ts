@@ -129,9 +129,9 @@ export function getImageModelDefinition(
   return model;
 }
 
-export const DEFAULT_CHAT_MODEL: ModelId = "openai/gpt-5-nano";
-export const DEFAULT_PDF_MODEL: ModelId = "openai/gpt-5-mini";
-export const DEFAULT_TITLE_MODEL: ModelId = "openai/gpt-5-nano";
+export const DEFAULT_CHAT_MODEL: ModelId = "openai/gpt-4o";
+export const DEFAULT_PDF_MODEL: ModelId = "openai/gpt-4o-mini";
+export const DEFAULT_TITLE_MODEL: ModelId = "openai/gpt-4.1-nano";
 export const DEFAULT_ARTIFACT_MODEL: ModelId = "openai/gpt-5-nano";
 export const DEFAULT_FOLLOWUP_SUGGESTIONS_MODEL: ModelId =
   "google/gemini-2.5-flash-lite";
